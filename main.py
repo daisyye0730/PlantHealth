@@ -92,6 +92,42 @@ def checkBrownSpot(img, name):
 def checkYellowing(img, name): 
     pass
 
+
+'''algorithm for discoloration spots -- raymond'''
+def checkDiscoloration(img, name):
+    # Check for anything that is not green (or black/background)
+    frame_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)               # Convert to HSV space
+    green_mask = cv2.inRange(frame_hsv, GREEN_LOWER, GREEN_UPPER)  # Create mask for green regions
+    not_green_pos = ~green_mask > 0                                # Find which pixels are not green
+    not_green = np.zeros_like(img, np.uint8)                       # Prepare new image matrix
+    not_green[not_green_pos] = img[not_green_pos]                  # Set each pixel
+
+    # Get image dimensions
+    pixels_leaf = 0
+    pixels_discolored = 0
+    height, width, _ = not_green.shape
+
+    # Going through each pixel of a large image can take a few seconds...
+    print("[Discoloration] Calculating...")
+
+    # Go through each pixel
+    for r in range(height):
+        for c in range(width):
+            if any(img[r][c]):        # If pixel in image is not (0,0,0) = black
+                pixels_leaf += 1
+            if any(not_green[r][c]):  # If pixel under not-green mask is not (0,0,0) = black
+                pixels_discolored += 1
+                not_green[r][c] = (0, 0, 255)  # Mark the discolored parts in red
+
+    # Print stats
+    print(f"[Discoloration] {pixels_discolored:,} discolored pixels / {pixels_leaf:,} total pixels = {pixels_discolored / pixels_leaf * 100}% discolored")
+
+    # Make a new showing discolored parts on left, original image on right
+    horiz = np.concatenate((not_green, img), axis=1)
+    cv2.imshow(name, horiz)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
 '''main'''
 # load all images from the Library directory
 images = {}
@@ -103,3 +139,4 @@ for filename in glob.glob("./library/*.png"):
 for name, img in images.items(): 
     checkBrownSpot(img, name)
     checkYellowing(img, name)
+    checkDiscoloration(img, name)
