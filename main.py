@@ -4,24 +4,26 @@ import numpy as np
 
 # constants
 # if not commented, the range is in hsv 
-BROWN_LOWER = (0, 70, 0)  
+BROWN_LOWER = (0, 20, 0)  
 BROWN_UPPER = (100, 255, 255)
 GREEN_LOWER = (25, 10, 0)
 GREEN_UPPER = (86, 255, 240)
-GREY_LOWER = (0, 0, 0)
-GREY_UPPER = (360, 55, 240)
+GREY_LOWER = (0, 0, 70)
+GREY_UPPER = (180, 20, 240)
 YELLOW_LOWER1 = (0, 107, 127)
 YELLOW_UPPER1 = (30, 255, 255)
 YELLOW_LOWER2 = (15, 0, 0)
 YELLOW_UPPER2 = (30, 126, 126)
-GLARE_LOWER = (240, 240, 240) # rgb
-GLARE_UPPER = (255, 255, 255) # rgb
+GLARE_LOWER = (240, 240, 240) #bgr
+GLARE_UPPER = (255, 255, 255) #bgr
 BLUE_LOWER1 = (85, 20, 90) 
 BLUE_UPPER1 = (138, 255, 255) 
 BLUE_LOWER2 = (85, 0, 0) 
 BLUE_UPPER2 = (138, 126, 126) 
-WHITE_LOWER = (200, 200, 200) #rgb
-WHITE_UPPER = (255, 255, 255) # rgb
+WHITE_LOWER = (200, 200, 200) #bgr
+WHITE_UPPER = (255, 255, 255) #bgr
+BLACK_LOWER = (0, 0, 0) #bgr
+BLACK_UPPER = (10, 10, 10) #bgr
 AREA_MIN = 300 # constant to determine which brown spots are large enough to be important 
 
 '''Function to reduce glare'''
@@ -48,33 +50,34 @@ def blurEdge(img, name):
 
 
 '''Function that filters out the grey regions'''
-def filterGrey(frame_hsv):
-    # Check for anything that is not grey (or black/background)
-    # Create mask for grey regions
-    grey_mask = cv2.inRange(frame_hsv, GREY_LOWER, GREY_UPPER)
-    # # Find which pixels are not grey
-    # not_grey_pos = ~grey_mask > 0
-    # # Prepare new image matrix
-    # not_grey = np.zeros_like(frame_hsv, np.uint8)
-    # # Set each pixel
-    # not_grey[not_grey_pos] = frame_hsv[not_grey_pos]
-    no_grey = cv2.bitwise_not(grey_mask)
-    return cv2.bitwise_and(frame_hsv, frame_hsv, mask=no_grey)
-
+def filterGrey(rgb):
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_BGR2HSV)
+    h, s, v = cv2.split(hsv)
+    mask_h = cv2.inRange(h, 0, 180)
+    mask_s = cv2.inRange(s, 0, 55)
+    mask_v = cv2.inRange(v, 0, 240)
+    res = cv2.bitwise_and(mask_h, mask_s)
+    res2 = cv2.bitwise_and(res, mask_v)
+    not_res = cv2.bitwise_not(res2)
+    res = cv2.bitwise_or(hsv, hsv, mask=not_res)
+    return cv2.cvtColor(res, cv2.COLOR_HSV2BGR)
+ 
 '''Function that filters out the white regions'''
 def filterWhite(rgb):
     # Check for anything that is not white (or black/background)
     # Create mask for white regions
     white_mask = cv2.inRange(rgb, WHITE_LOWER, WHITE_UPPER)
     no_white = cv2.bitwise_not(white_mask)
-    return cv2.bitwise_or(rgb, rgb, mask=no_white)
+    res = cv2.bitwise_or(rgb, rgb, mask=no_white)
+    return res
 
 
 '''Function that filters out the blue regions'''
-def filterBlue(frame_hsv):
+def filterBlue(rgb):
     # Check for anything that is not blue (or black/background)
     # we need to slice blue twice because it is a parabolic slice on the hsv color space
     # Create mask for blue regions
+    frame_hsv = cv2.cvtColor(rgb, cv2.COLOR_BGR2HSV)
     blue_mask1 = cv2.inRange(frame_hsv, BLUE_LOWER1, BLUE_UPPER1)
     not_blue_pos = ~blue_mask1 > 0
     not_blue = np.zeros_like(frame_hsv, np.uint8)
@@ -86,36 +89,26 @@ def filterBlue(frame_hsv):
     not_blue2 = np.zeros_like(frame_hsv, np.uint8)
     # Set each pixel
     not_blue2[not_blue_pos] = not_blue[not_blue_pos]
-    return not_blue
+    return cv2.cvtColor(not_blue, cv2.COLOR_HSV2BGR)
 
 
-'''This function ignores all the brown pixels on the edge of the leaf'''
-def ignorePixelOnEdge(brownImg, original_img): 
-    # first detect the contour of the leaf 
+'''This function detects the contour of the leaf'''
+def detectContour(original_img):  
     original_img = cv2.blur(original_img, (5, 5))
     dilated = cv2.dilate(original_img, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(9,9)))
     cont_img = cv2.cvtColor(dilated, cv2.COLOR_BGR2GRAY)
     contours, hierarchy = cv2.findContours(cont_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    copy = original_img.copy()
-    # find the biggest countour (c) by the area
     c = max(contours, key = cv2.contourArea)
-    for ele in c:
-        if ele[0][0] < brownImg.shape[0] and ele[0][1] < brownImg.shape[1] and brownImg[ele[0][0]][ele[0][1]].all() != 0: 
-            brownImg[ele[0][0]][ele[0][1]] = 0
-    cv2.drawContours(copy, c, -1, (0,255,0))
-    horiz = np.concatenate(
-        (img, copy, brownImg), axis=1)
-    cv2.imshow(name, horiz)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    return c 
+
 
 '''This function detects where the brown regions are relative to the leaf'''
-def detectlocation(brown_img, name):
+def detectlocation(brown_img, name, original_img):
     kernel = np.ones((2, 2), np.uint8)
     img = cv2.morphologyEx(brown_img, cv2.MORPH_CLOSE, kernel)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    #Finding contours of white square:
     conts, hierarchy = cv2.findContours(img, cv2.RETR_EXTERNAL , cv2.CHAIN_APPROX_SIMPLE)
+    li_rect = []
     for cnt in conts:
         area = cv2.contourArea(cnt)
 
@@ -124,11 +117,22 @@ def detectlocation(brown_img, name):
             x1, y1, w, h = cv2.boundingRect(cnt)
             x2 = x1 + w                   # (x1, y1) = top-left vertex
             y2 = y1 + h                   # (x2, y2) = bottom-right vertex
-            img = cv2.rectangle(img, (x1, y1), (x2, y2), (255,0,0), 2)
+            img = cv2.rectangle(original_img, (x1, y1), (x2, y2), (255,0,0), 2)
+            li_rect.append(((x1,y1), (x2,y2)))
     cv2.imshow(name, img)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
+    contour_leaf = detectContour(original_img)
+    # TODO: check how are the rectangles positioned given the contour
     return img
+
+
+'''This function filters out pixels that are almost black'''
+def turnblack(rgb):
+    black_mask = cv2.inRange(rgb, BLACK_LOWER, BLACK_UPPER)
+    no_black= cv2.bitwise_not(black_mask)
+    res = cv2.bitwise_or(rgb, rgb, mask=no_black)
+    return res
 
 
 '''algorithm for brown spot -- daisy'''
@@ -146,20 +150,24 @@ def checkBrownSpot(img, name):
     no_white = filterWhite(not_yellow)
     no_grey = filterGrey(no_white)
     no_blue = filterBlue(no_grey)
+    # turn pixels that are almost black into completely black 
+    change_to_black = turnblack(no_blue)
     # brown color
     # Create the brown HSV mask
-    brown_mask = cv2.inRange(no_grey, BROWN_LOWER, BROWN_UPPER)
-    brown = cv2.bitwise_and(no_grey, no_grey, mask=brown_mask)
+    hsv = cv2.cvtColor(change_to_black, cv2.COLOR_BGR2HSV)
+    brown_mask = cv2.inRange(hsv, BROWN_LOWER, BROWN_UPPER)
+    brown = cv2.bitwise_and(hsv, hsv, mask=brown_mask)
+    new_brown = cv2.cvtColor(brown, cv2.COLOR_HSV2BGR)
     horiz = np.concatenate(
-        (img, no_green, not_yellow, no_white, no_grey, no_blue), axis=1)
-    cv2.imshow(name+"+ xgree + xyellow + xwhite + xgrey + xblue", horiz)
+        (img, no_green, not_yellow, no_white, no_grey, no_blue, brown), axis=1)
+    cv2.imshow(name+"+ xgree + xyellow + xwhite + xgrey + xblue + brown", horiz)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
-    gray = cv2.cvtColor(brown, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(new_brown, cv2.COLOR_BGR2GRAY)
     brown_count = cv2.countNonZero(gray)
     ratio = brown_count/sa
     print(f"[Brown Spot] {brown_count:,} brown pixels / {sa:,} total pixels = {round(ratio,3) * 100}% brown")
-    detectlocation(brown, name)
+    final_img = detectlocation(new_brown, name, img)
 
 
 '''algorithm for yellowing of leaf -- daisy'''
@@ -295,7 +303,7 @@ for filename in glob.glob("./library/*.png"):
 
 for name, img in images.items():
     print(name)
-    # checkBrownSpot(img, name)
+    checkBrownSpot(img, name)
     #checkYellowing(img, name, False)
     #checkDiscoloration(img, name)
-    checkHoles(img, name)
+    #checkHoles(img, name)
