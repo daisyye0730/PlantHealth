@@ -6,20 +6,22 @@ import numpy as np
 # if not commented, the range is in hsv 
 BROWN_LOWER = (0, 70, 0)  
 BROWN_UPPER = (100, 255, 255)
-GREEN_LOWER = (27, 10, 0)
+GREEN_LOWER = (25, 10, 0)
 GREEN_UPPER = (86, 255, 240)
 GREY_LOWER = (0, 0, 0)
-GREY_UPPER = (255, 55, 240)
+GREY_UPPER = (360, 55, 240)
 YELLOW_LOWER1 = (0, 107, 127)
 YELLOW_UPPER1 = (30, 255, 255)
 YELLOW_LOWER2 = (15, 0, 0)
 YELLOW_UPPER2 = (30, 126, 126)
-GLARE_LOWER = (220, 220, 220) # rgb
+GLARE_LOWER = (240, 240, 240) # rgb
 GLARE_UPPER = (255, 255, 255) # rgb
-BLUE_LOWER1 = (86, 20, 90) 
+BLUE_LOWER1 = (85, 20, 90) 
 BLUE_UPPER1 = (138, 255, 255) 
-BLUE_LOWER2 = (86, 0, 0) 
+BLUE_LOWER2 = (85, 0, 0) 
 BLUE_UPPER2 = (138, 126, 126) 
+WHITE_LOWER = (200, 200, 200) #rgb
+WHITE_UPPER = (255, 255, 255) # rgb
 AREA_MIN = 300 # constant to determine which brown spots are large enough to be important 
 
 '''Function to reduce glare'''
@@ -50,13 +52,22 @@ def filterGrey(frame_hsv):
     # Check for anything that is not grey (or black/background)
     # Create mask for grey regions
     grey_mask = cv2.inRange(frame_hsv, GREY_LOWER, GREY_UPPER)
-    # Find which pixels are not grey
-    not_grey_pos = ~grey_mask > 0
-    # Prepare new image matrix
-    not_grey = np.zeros_like(frame_hsv, np.uint8)
-    # Set each pixel
-    not_grey[not_grey_pos] = frame_hsv[not_grey_pos]
-    return not_grey
+    # # Find which pixels are not grey
+    # not_grey_pos = ~grey_mask > 0
+    # # Prepare new image matrix
+    # not_grey = np.zeros_like(frame_hsv, np.uint8)
+    # # Set each pixel
+    # not_grey[not_grey_pos] = frame_hsv[not_grey_pos]
+    no_grey = cv2.bitwise_not(grey_mask)
+    return cv2.bitwise_and(frame_hsv, frame_hsv, mask=no_grey)
+
+'''Function that filters out the white regions'''
+def filterWhite(rgb):
+    # Check for anything that is not white (or black/background)
+    # Create mask for white regions
+    white_mask = cv2.inRange(rgb, WHITE_LOWER, WHITE_UPPER)
+    no_white = cv2.bitwise_not(white_mask)
+    return cv2.bitwise_or(rgb, rgb, mask=no_white)
 
 
 '''Function that filters out the blue regions'''
@@ -132,17 +143,18 @@ def checkBrownSpot(img, name):
     # filter green, grey, blue from images
     no_green = filterGreen(glare_reduced)
     not_yellow = filterYellow(no_green)
-    no_green_grey = filterGrey(not_yellow)
-    # no_green_grey_blue = filterBlue(no_green_grey)
+    no_white = filterWhite(not_yellow)
+    no_grey = filterGrey(no_white)
+    no_blue = filterBlue(no_grey)
     # brown color
     # Create the brown HSV mask
-    brown_mask = cv2.inRange(no_green_grey, BROWN_LOWER, BROWN_UPPER)
-    brown = cv2.bitwise_and(no_green_grey, no_green_grey, mask=brown_mask)
-    # horiz = np.concatenate(
-    #     (img, brown), axis=1)
-    # cv2.imshow(name, horiz)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
+    brown_mask = cv2.inRange(no_grey, BROWN_LOWER, BROWN_UPPER)
+    brown = cv2.bitwise_and(no_grey, no_grey, mask=brown_mask)
+    horiz = np.concatenate(
+        (img, no_green, not_yellow, no_white, no_grey, no_blue), axis=1)
+    cv2.imshow(name+"+ xgree + xyellow + xwhite + xgrey + xblue", horiz)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
     gray = cv2.cvtColor(brown, cv2.COLOR_BGR2GRAY)
     brown_count = cv2.countNonZero(gray)
     ratio = brown_count/sa
