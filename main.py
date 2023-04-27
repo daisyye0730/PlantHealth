@@ -230,6 +230,60 @@ def checkDiscoloration(img, name):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
+'''algorithm for detecting holes in leaf -- raymond'''
+def checkHoles(img, name):
+    mask_img = img.copy() # Create a copy so we do not edit the actual image itself (drawContours() will do that)
+
+    # Make the image grayscale so we can apply at threshold for anything that is not the background (black)
+    NOT_BLACK_LOWER_THRESHOLD = 50  # Ignore anything that is 0-49 in black & white
+    grayscale_img = cv2.cvtColor(mask_img, cv2.COLOR_BGR2GRAY)
+    _, binary_img = cv2.threshold(grayscale_img, NOT_BLACK_LOWER_THRESHOLD, 255, cv2.THRESH_BINARY)
+
+    # Now, find the largest contour (the leaf)
+    contours, _ = cv2.findContours(binary_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    max_contour = max(contours, key=cv2.contourArea)
+
+    # Draw the border of the leaf in red
+    mask_color = (0, 0, 255)
+    red_leaf = cv2.drawContours(mask_img, contours=[max_contour], contourIdx=-1, color=mask_color, thickness=cv2.FILLED)  # Creates a red mask of the leaf
+
+    # Going through each pixel of a large image can take a few seconds...
+    print("[Hole detection] Calculating...")
+
+    # Preparing to create an image of the leaf with blue background instead of black
+    blue_bg = np.zeros_like(red_leaf)
+    height, width, _ = blue_bg.shape
+    for r in range(height):
+        for c in range(width):
+            if red_leaf[r][c][0] == 0 and red_leaf[r][c][1] == 0 and red_leaf[r][c][2] == 255:  # If pixel inside leaf contour
+                blue_bg[r][c] = img[r][c]                                                       #   Restore to original leaf image (including holes)
+            else:                            # Else: Outside leaf contour = background
+                blue_bg[r][c] = (255, 0, 0)  #   Change to blue
+
+    # The image is now the original leaf (incl. holes) with a blue background instead of black
+    # Now the only thing that is black are the holes within the leaf
+
+    # We will find contours of the black holes to show the user
+    # First, convert to black & white
+    NOT_BW_BLUE_LOWER_THRESHOLD = 28
+    grayscale_img = cv2.cvtColor(blue_bg, cv2.COLOR_BGR2GRAY)
+    # Since the holes themselves are black, we can't make a normal mask since the entire image will be black
+    # Use an inverted mask instead
+    _, binary_img = cv2.threshold(grayscale_img, NOT_BW_BLUE_LOWER_THRESHOLD, 255, cv2.THRESH_BINARY_INV)
+
+    # Find contours (= holes)
+    contours, _ = cv2.findContours(binary_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    filtered_contours = list(filter(lambda ct: cv2.contourArea(ct) > 10, contours))  # Filter out the contours with too low of an area (probable noise))
+
+    # Draw boxes around contours
+    box_color = (0,0,255)
+    orig = img.copy()
+    holes = cv2.drawContours(orig, contours=filtered_contours, contourIdx=-1, color=box_color, thickness=10)  # Draws red boxes around holes
+            
+    cv2.imshow(name, holes)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
 
 '''main'''
 # load all images from the Library directory
@@ -241,6 +295,7 @@ for filename in glob.glob("./library/*.png"):
 
 for name, img in images.items():
     print(name)
-    checkBrownSpot(img, name)
+    # checkBrownSpot(img, name)
     #checkYellowing(img, name, False)
     #checkDiscoloration(img, name)
+    checkHoles(img, name)
