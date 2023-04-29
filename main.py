@@ -10,10 +10,15 @@ GREEN_LOWER = (25, 10, 0)
 GREEN_UPPER = (86, 255, 240)
 GREY_LOWER = (0, 0, 70)
 GREY_UPPER = (180, 20, 240)
+# these yellows are for analyzing brown spots 
 YELLOW_LOWER1 = (0, 107, 127)
 YELLOW_UPPER1 = (30, 255, 255)
 YELLOW_LOWER2 = (15, 0, 0)
 YELLOW_UPPER2 = (30, 126, 126)
+# these yellows are for analyzing yellowing 
+YELLOW_LOWER3 = (15, 127, 127)
+YELLOW_UPPER3 = (30, 255, 255)
+# this is used to reduce glare 
 GLARE_LOWER = (240, 240, 240) #bgr
 GLARE_UPPER = (255, 255, 255) #bgr
 BLUE_LOWER1 = (85, 20, 90) 
@@ -24,7 +29,8 @@ WHITE_LOWER = (200, 200, 200) #bgr
 WHITE_UPPER = (255, 255, 255) #bgr
 BLACK_LOWER = (0, 0, 0) #bgr
 BLACK_UPPER = (10, 10, 10) #bgr
-AREA_MIN = 300 # constant to determine which brown spots are large enough to be important 
+# constant to determine which brown spots are large enough to be important 
+AREA_MIN = 300 
 
 '''Function to reduce glare'''
 def reduceGlare(img, name):
@@ -108,18 +114,13 @@ def detectlocation(brown_img, name, original_img):
     img = cv2.morphologyEx(brown_img, cv2.MORPH_CLOSE, kernel)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     conts, hierarchy = cv2.findContours(img, cv2.RETR_EXTERNAL , cv2.CHAIN_APPROX_SIMPLE)
-    li_rect = []
+    #cv2.drawContours(original_img, conts, -1, (0,255,0), 3)
     for cnt in conts:
         area = cv2.contourArea(cnt)
-
         #filter more noise
         if area > AREA_MIN: 
-            x1, y1, w, h = cv2.boundingRect(cnt)
-            x2 = x1 + w                   # (x1, y1) = top-left vertex
-            y2 = y1 + h                   # (x2, y2) = bottom-right vertex
-            img = cv2.rectangle(original_img, (x1, y1), (x2, y2), (255,0,0), 2)
-            li_rect.append(((x1,y1), (x2,y2)))
-    cv2.imshow(name, img)
+            cv2.drawContours(original_img, cnt, -1, (0,0,255), 3)
+    cv2.imshow(name, original_img)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
     contour_leaf = detectContour(original_img)
@@ -158,11 +159,11 @@ def checkBrownSpot(img, name):
     brown_mask = cv2.inRange(hsv, BROWN_LOWER, BROWN_UPPER)
     brown = cv2.bitwise_and(hsv, hsv, mask=brown_mask)
     new_brown = cv2.cvtColor(brown, cv2.COLOR_HSV2BGR)
-    horiz = np.concatenate(
-        (img, no_green, not_yellow, no_white, no_grey, no_blue, brown), axis=1)
-    cv2.imshow(name+"+ xgree + xyellow + xwhite + xgrey + xblue + brown", horiz)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    # horiz = np.concatenate(
+    #     (img, no_green, not_yellow, no_white, no_grey, no_blue, brown), axis=1)
+    # cv2.imshow(name+"+ xgree + xyellow + xwhite + xgrey + xblue + brown", horiz)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
     gray = cv2.cvtColor(new_brown, cv2.COLOR_BGR2GRAY)
     brown_count = cv2.countNonZero(gray)
     ratio = brown_count/sa
@@ -171,8 +172,38 @@ def checkBrownSpot(img, name):
 
 
 '''algorithm for yellowing of leaf -- daisy'''
-def checkYellowing(img, name, isBrown):
-    pass
+def checkYellowing(img, name):
+    # calculate surface area of the leaf
+    # by subtracting the number of black pixels from the entire image
+    blurred = blurEdge(img, name)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    sa = cv2.countNonZero(gray)
+    # reduce the glare
+    glare_reduced = reduceGlare(blurred, name[:-4])
+    # filter out the green
+    no_green = filterGreen(glare_reduced)
+    # only look at the yellow 
+    # Convert to HSV space
+    frame_hsv = cv2.cvtColor(no_green, cv2.COLOR_BGR2HSV)
+    # Create mask for yellow regions
+    mask = cv2.inRange(frame_hsv, YELLOW_LOWER3, YELLOW_UPPER3)
+    # yellow_mask2 = cv2.inRange(frame_hsv, YELLOW_LOWER4, YELLOW_UPPER4)
+    # mask = cv2.bitwise_or(yellow_mask, yellow_mask2)
+    # Find which pixels are yellow
+    yellow_pos = mask > 0
+    # Prepare new image matrix
+    yellow = np.zeros_like(img, np.uint8)
+    # Set each pixel
+    yellow[yellow_pos] = no_green[yellow_pos]
+    # horiz = np.concatenate(
+    #     (img, yellow))
+    # cv2.imshow(name, horiz)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+    gray = cv2.cvtColor(yellow, cv2.COLOR_BGR2GRAY)
+    yellow_count = cv2.countNonZero(gray)
+    ratio = yellow_count/sa
+    print(f"[Yellowing] {yellow_count:,} yellow pixels / {sa:,} total pixels = {round(ratio,3) * 100}% yellow")
 
 
 '''function that looks at only non-yellow parts '''
@@ -304,6 +335,6 @@ for filename in glob.glob("./library/*.png"):
 for name, img in images.items():
     print(name)
     checkBrownSpot(img, name)
-    #checkYellowing(img, name, False)
+    checkYellowing(img, name)
     #checkDiscoloration(img, name)
     #checkHoles(img, name)
