@@ -114,17 +114,38 @@ def detectlocation(brown_img, name, original_img):
     img = cv2.morphologyEx(brown_img, cv2.MORPH_CLOSE, kernel)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     conts, hierarchy = cv2.findContours(img, cv2.RETR_EXTERNAL , cv2.CHAIN_APPROX_SIMPLE)
+    contour_leaf = detectContour(original_img)
+    x,y,w,h = cv2.boundingRect(contour_leaf)
     #cv2.drawContours(original_img, conts, -1, (0,255,0), 3)
+    d = {"upper left": 0, "lower left": 0, "upper right": 0, "lower right": 0}
     for cnt in conts:
         area = cv2.contourArea(cnt)
         #filter more noise
         if area > AREA_MIN: 
             cv2.drawContours(original_img, cnt, -1, (0,0,255), 3)
+            M = cv2.moments(cnt)
+            if M['m00'] != 0:
+                cx = int(M['m10']/M['m00'])
+                cy = int(M['m01']/M['m00'])
+                # check where the center of mass is positioned regarding the entire contour of leaf
+                if cx < (x+w/2): 
+                    if cy < (y+h/2): 
+                        d["upper left"] += area 
+                    else: 
+                        d["lower left"] += area
+                else: 
+                    if cy < (y+h/2): 
+                        d["upper right"] += area
+                    else: 
+                        d["lower right"] += area
+    if d["upper left"] == 0 and d["lower left"] == 0 and d["upper right"] == 0 and d["lower right"] == 0:
+        print("No brown spot significant enough is detected")
+    else:
+        most_freq = max(d, key = d.get)
+        print("The brown spots are mostly in the",most_freq,"corner.")
     cv2.imshow(name, original_img)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
-    contour_leaf = detectContour(original_img)
-    # TODO: check how are the rectangles positioned given the contour
     return img
 
 
