@@ -386,13 +386,13 @@ def checkHoles(img, name):
     # Print stats
     print(f"\t[Holes] {hole_pixels:,} pixels / {CURRENT_SA:,} total pixels = {hole_pixels / CURRENT_SA * 100}% holes")
     ratio = hole_pixels / CURRENT_SA
-    if ratio < 0.03: 
+    if ratio * 100 < 0.03: 
         print("\t[Hole Detection Score] Healthy -- Score 5")
-    elif ratio < 0.05: 
+    elif ratio * 100 < 0.05: 
         print("\t[Hole Detection Score] Relatively Healthy -- Score 4")
-    elif ratio < 0.10: 
+    elif ratio * 100 < 0.10: 
         print("\t[Hole Detection Score] Okay -- Score 3")
-    elif ratio < 0.15: 
+    elif ratio * 100 < 0.15: 
         print("\t[Hole Detection Score] Relatively Unhealthy -- Score 2")
     else:
         print("\t[Hole Detection Score] Unhealthy -- Score 1")
