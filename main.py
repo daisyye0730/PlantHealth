@@ -5,16 +5,20 @@ import numpy as np
 # constants
 # if not commented, the range is in hsv 
 BROWN_LOWER = (0, 20, 0)  
-BROWN_UPPER = (100, 255, 255)
+BROWN_UPPER = (100, 255, 240)
 GREEN_LOWER = (25, 10, 0)
 GREEN_UPPER = (86, 255, 240)
 GREY_LOWER = (0, 0, 70)
 GREY_UPPER = (180, 20, 240)
 # these yellows are for analyzing brown spots 
-YELLOW_LOWER1 = (0, 107, 127)
+YELLOW_LOWER1 = (0, 180, 170)
 YELLOW_UPPER1 = (30, 255, 255)
-YELLOW_LOWER2 = (15, 0, 0)
-YELLOW_UPPER2 = (30, 126, 126)
+YELLOW_LOWER2 = (15, 20, 170)
+YELLOW_UPPER2 = (30, 126, 255)
+# YELLOW_LOWER1 = (0, 107, 127)
+# YELLOW_UPPER1 = (30, 255, 255)
+# YELLOW_LOWER2 = (15, 0, 0)
+# YELLOW_UPPER2 = (30, 126, 126)
 # these yellows are for analyzing yellowing 
 YELLOW_LOWER3 = (15, 127, 127)
 YELLOW_UPPER3 = (30, 255, 255)
@@ -28,9 +32,11 @@ BLUE_UPPER2 = (138, 126, 126)
 WHITE_LOWER = (200, 200, 200) #bgr
 WHITE_UPPER = (255, 255, 255) #bgr
 BLACK_LOWER = (0, 0, 0) #bgr
-BLACK_UPPER = (10, 10, 10) #bgr
+BLACK_UPPER = (20, 20, 20) #bgr
 # constant to determine which brown spots are large enough to be important 
 AREA_MIN = 300 
+
+CURRENT_SA = 0 # global variable for the current surface area 
 
 '''Function to reduce glare'''
 def reduceGlare(img, name):
@@ -143,9 +149,9 @@ def detectlocation(brown_img, name, original_img):
     else:
         most_freq = max(d, key = d.get)
         print("The brown spots are mostly in the",most_freq,"corner.")
-    cv2.imshow(name, original_img)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    # cv2.imshow(name, original_img)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
     return img
 
 
@@ -161,9 +167,10 @@ def turnblack(rgb):
 def checkBrownSpot(img, name):
     # calculate surface area of the leaf
     # by subtracting the number of black pixels from the entire image
+    global CURRENT_SA
     blurred = blurEdge(img, name)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    sa = cv2.countNonZero(gray)
+    CURRENT_SA = cv2.countNonZero(gray)
     # reduce the glare
     glare_reduced = reduceGlare(blurred, name[:-4])
     # filter green, grey, blue from images
@@ -187,8 +194,18 @@ def checkBrownSpot(img, name):
     # cv2.destroyAllWindows()
     gray = cv2.cvtColor(new_brown, cv2.COLOR_BGR2GRAY)
     brown_count = cv2.countNonZero(gray)
-    ratio = brown_count/sa
-    print(f"[Brown Spot] {brown_count:,} brown pixels / {sa:,} total pixels = {round(ratio,3) * 100}% brown")
+    ratio = brown_count/CURRENT_SA
+    print(f"\t[Brown Spot] {brown_count:,} brown pixels / {CURRENT_SA:,} total pixels = {round(ratio,3) * 100}% brown")
+    if ratio < 0.1: 
+        print("\t[Brown Spot Score] Healthy -- Score 5")
+    elif ratio < 0.2: 
+        print("\t[Brown Spot Score] Relatively Healthy -- Score 4")
+    elif ratio < 0.3: 
+        print("\t[Brown Spot Score] Okay -- Score 3")
+    elif ratio < 0.4: 
+        print("\t[Brown Spot Score] Relatively Unhealthy -- Score 2")
+    else:
+        print("\t[Brown Spot Score] Unhealthy -- Score 1")
     final_img = detectlocation(new_brown, name, img)
 
 
@@ -198,7 +215,6 @@ def checkYellowing(img, name):
     # by subtracting the number of black pixels from the entire image
     blurred = blurEdge(img, name)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    sa = cv2.countNonZero(gray)
     # reduce the glare
     glare_reduced = reduceGlare(blurred, name[:-4])
     # filter out the green
@@ -223,9 +239,19 @@ def checkYellowing(img, name):
     # cv2.destroyAllWindows()
     gray = cv2.cvtColor(yellow, cv2.COLOR_BGR2GRAY)
     yellow_count = cv2.countNonZero(gray)
-    ratio = yellow_count/sa
-    print(f"[Yellowing] {yellow_count:,} yellow pixels / {sa:,} total pixels = {round(ratio,3) * 100}% yellow")
-
+    ratio = yellow_count/CURRENT_SA
+    print(f"\t[Yellowing] {yellow_count:,} yellow pixels / {CURRENT_SA:,} total pixels = {round(ratio,3) * 100}% yellow")
+    if ratio < 0.1: 
+        print("\t[Yellowing Score] Healthy -- Score 5")
+    elif ratio < 0.2: 
+        print("\t[Yellowing Score] Relatively Healthy -- Score 4")
+    elif ratio < 0.3: 
+        print("\t[Yellowing Score] Okay -- Score 3")
+    elif ratio < 0.4: 
+        print("\t[Yellowing Score] Relatively Unhealthy -- Score 2")
+    else:
+        print("\t[Yellowing Score] Unhealthy -- Score 1")
+        
 
 '''function that looks at only non-yellow parts '''
 def filterYellow(img):
@@ -267,9 +293,10 @@ def checkDiscoloration(img, name):
     pixels_leaf = 0
     pixels_discolored = 0
     height, width, _ = not_green.shape
+    img = turnblack(img)
 
     # Going through each pixel of a large image can take a few seconds...
-    print("[Discoloration] Calculating...")
+    #print("[Discoloration] Calculating...")
 
     # Go through each pixel
     for r in range(height):
@@ -282,13 +309,24 @@ def checkDiscoloration(img, name):
                 not_green[r][c] = (0, 0, 255)
 
     # Print stats
-    print(f"[Discoloration] {pixels_discolored:,} discolored pixels / {pixels_leaf:,} total pixels = {pixels_discolored / pixels_leaf * 100}% discolored")
+    print(f"\t[Discoloration] {pixels_discolored:,} discolored pixels / {CURRENT_SA:,} total pixels = {pixels_discolored / CURRENT_SA * 100}% discolored")
 
     # Make a new showing discolored parts on left, original image on right
-    horiz = np.concatenate((not_green, img), axis=1)
-    cv2.imshow(name, horiz)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    # horiz = np.concatenate((not_green, img), axis=1)
+    # cv2.imshow(name, horiz)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+    ratio = pixels_discolored / CURRENT_SA
+    if ratio < 0.1: 
+        print("\t[Discoloration Score] Healthy -- Score 5")
+    elif ratio < 0.2: 
+        print("\t[Discoloration Score] Relatively Healthy -- Score 4")
+    elif ratio < 0.3: 
+        print("\t[Discoloration Score] Okay -- Score 3")
+    elif ratio < 0.4: 
+        print("\t[Discoloration Score] Relatively Unhealthy -- Score 2")
+    else:
+        print("\t[Discoloration Score] Unhealthy -- Score 1")
 
 '''algorithm for detecting holes in leaf -- raymond'''
 def checkHoles(img, name):
@@ -339,11 +377,26 @@ def checkHoles(img, name):
     box_color = (0,0,255)
     orig = img.copy()
     holes = cv2.drawContours(orig, contours=filtered_contours, contourIdx=-1, color=box_color, thickness=10)  # Draws red boxes around holes
-            
-    cv2.imshow(name, holes)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-
+    hole_pixels = 0
+    for cnt in filtered_contours:
+        hole_pixels += cv2.contourArea(cnt)
+    # cv2.imshow(name, holes)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+    # Print stats
+    print(f"\t[Holes] {hole_pixels:,} pixels / {CURRENT_SA:,} total pixels = {hole_pixels / CURRENT_SA * 100}% holes")
+    ratio = hole_pixels / CURRENT_SA
+    if ratio < 0.03: 
+        print("\t[Hole Detection Score] Healthy -- Score 5")
+    elif ratio < 0.05: 
+        print("\t[Hole Detection Score] Relatively Healthy -- Score 4")
+    elif ratio < 0.10: 
+        print("\t[Hole Detection Score] Okay -- Score 3")
+    elif ratio < 0.15: 
+        print("\t[Hole Detection Score] Relatively Unhealthy -- Score 2")
+    else:
+        print("\t[Hole Detection Score] Unhealthy -- Score 1")
+        
 
 '''main'''
 # load all images from the Library directory
@@ -355,7 +408,8 @@ for filename in glob.glob("./library/*.png"):
 
 for name, img in images.items():
     print(name)
-    checkBrownSpot(img, name)
-    checkYellowing(img, name)
-    #checkDiscoloration(img, name)
-    #checkHoles(img, name)
+    checkBrownSpot(img.copy(), name)
+    checkYellowing(img.copy(), name)
+    checkDiscoloration(img, name)
+    checkHoles(img, name)
+    print()
