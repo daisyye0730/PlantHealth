@@ -1,6 +1,7 @@
 import cv2
 import glob
 import numpy as np
+import os 
 
 # constants
 # if not commented, the range is in hsv 
@@ -115,7 +116,7 @@ def detectContour(original_img):
 
 
 '''This function detects where the brown regions are relative to the leaf'''
-def detectlocation(brown_img, name, original_img):
+def detectlocation(brown_img, name, original_img, sentences):
     kernel = np.ones((2, 2), np.uint8)
     img = cv2.morphologyEx(brown_img, cv2.MORPH_CLOSE, kernel)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -145,14 +146,14 @@ def detectlocation(brown_img, name, original_img):
                     else: 
                         d["lower right"] += area
     if d["upper left"] == 0 and d["lower left"] == 0 and d["upper right"] == 0 and d["lower right"] == 0:
-        print("No brown spot significant enough is detected")
+        sentences.append("\tNo brown spot significant enough is detected")
     else:
         most_freq = max(d, key = d.get)
-        print("The brown spots are mostly in the",most_freq,"corner.")
+        sentences.append("\tThe brown spots are mostly in the "+most_freq+" corner.")
     # cv2.imshow(name, original_img)
     # cv2.waitKey(0)
     # cv2.destroyAllWindows()
-    return img
+    return original_img
 
 
 '''This function filters out pixels that are almost black'''
@@ -195,18 +196,27 @@ def checkBrownSpot(img, name):
     gray = cv2.cvtColor(new_brown, cv2.COLOR_BGR2GRAY)
     brown_count = cv2.countNonZero(gray)
     ratio = brown_count/CURRENT_SA
-    print(f"\t[Brown Spot] {brown_count:,} brown pixels / {CURRENT_SA:,} total pixels = {round(ratio,3) * 100}% brown")
+    sentences = []
+    sentences.append(f"\t[Brown Spot] {brown_count:,} brown pixels / {CURRENT_SA:,} total pixels = {round(ratio,3) * 100}% brown")
+    score = 0
     if ratio < 0.1: 
-        print("\t[Brown Spot Score] Healthy -- Score 5")
+        sentences.append("\t[Brown Spot Score] Healthy -- Score 5")
+        score = 5
     elif ratio < 0.2: 
-        print("\t[Brown Spot Score] Relatively Healthy -- Score 4")
+        sentences.append("\t[Brown Spot Score] Relatively Healthy -- Score 4")
+        score = 4
     elif ratio < 0.3: 
-        print("\t[Brown Spot Score] Okay -- Score 3")
+        sentences.append("\t[Brown Spot Score] Okay -- Score 3")
+        score = 3
     elif ratio < 0.4: 
-        print("\t[Brown Spot Score] Relatively Unhealthy -- Score 2")
+        sentences.append("\t[Brown Spot Score] Relatively Unhealthy -- Score 2")
+        score = 2
     else:
-        print("\t[Brown Spot Score] Unhealthy -- Score 1")
-    final_img = detectlocation(new_brown, name, img)
+        sentences.append("\t[Brown Spot Score] Unhealthy -- Score 1")
+        score = 1
+    final_img = detectlocation(new_brown, name, img, sentences)
+    cv2.imwrite(name[:-4]+"brownspot.png", final_img)
+    return (name[:-4]+"brownspot.png", sentences, score)
 
 
 '''algorithm for yellowing of leaf -- daisy'''
@@ -240,17 +250,26 @@ def checkYellowing(img, name):
     gray = cv2.cvtColor(yellow, cv2.COLOR_BGR2GRAY)
     yellow_count = cv2.countNonZero(gray)
     ratio = yellow_count/CURRENT_SA
-    print(f"\t[Yellowing] {yellow_count:,} yellow pixels / {CURRENT_SA:,} total pixels = {round(ratio,3) * 100}% yellow")
+    sentences = []
+    sentences.append(f"\t[Yellowing] {yellow_count:,} yellow pixels / {CURRENT_SA:,} total pixels = {round(ratio,3) * 100}% yellow")
+    score = 0
     if ratio < 0.1: 
-        print("\t[Yellowing Score] Healthy -- Score 5")
+        sentences.append("\t[Yellowing Score] Healthy -- Score 5")
+        score = 5
     elif ratio < 0.2: 
-        print("\t[Yellowing Score] Relatively Healthy -- Score 4")
+        sentences.append("\t[Yellowing Score] Relatively Healthy -- Score 4")
+        score = 4
     elif ratio < 0.3: 
-        print("\t[Yellowing Score] Okay -- Score 3")
+        sentences.append("\t[Yellowing Score] Okay -- Score 3")
+        score = 3
     elif ratio < 0.4: 
-        print("\t[Yellowing Score] Relatively Unhealthy -- Score 2")
+        sentences.append("\t[Yellowing Score] Relatively Unhealthy -- Score 2")
+        score = 2
     else:
-        print("\t[Yellowing Score] Unhealthy -- Score 1")
+        sentences.append("\t[Yellowing Score] Unhealthy -- Score 1")
+        score = 1
+    cv2.imwrite(name[:-4]+"yellowing.png", yellow)
+    return (name[:-4]+"yellowing.png", sentences, score)
         
 
 '''function that looks at only non-yellow parts '''
@@ -299,6 +318,7 @@ def checkDiscoloration(img, name):
     #print("[Discoloration] Calculating...")
 
     # Go through each pixel
+    score = 0
     for r in range(height):
         for c in range(width):
             if any(img[r][c]):        # If pixel in image is not (0,0,0) = black
@@ -307,9 +327,9 @@ def checkDiscoloration(img, name):
                 pixels_discolored += 1
                 # Mark the discolored parts in red
                 not_green[r][c] = (0, 0, 255)
-
+    sentences = []
     # Print stats
-    print(f"\t[Discoloration] {pixels_discolored:,} discolored pixels / {CURRENT_SA:,} total pixels = {pixels_discolored / CURRENT_SA * 100}% discolored")
+    sentences.append(f"\t[Discoloration] {pixels_discolored:,} discolored pixels / {CURRENT_SA:,} total pixels = {pixels_discolored / CURRENT_SA * 100}% discolored")
 
     # Make a new showing discolored parts on left, original image on right
     # horiz = np.concatenate((not_green, img), axis=1)
@@ -318,15 +338,22 @@ def checkDiscoloration(img, name):
     # cv2.destroyAllWindows()
     ratio = pixels_discolored / CURRENT_SA
     if ratio < 0.1: 
-        print("\t[Discoloration Score] Healthy -- Score 5")
+        sentences.append("\t[Discoloration Score] Healthy -- Score 5")
+        score = 5
     elif ratio < 0.2: 
-        print("\t[Discoloration Score] Relatively Healthy -- Score 4")
+        sentences.append("\t[Discoloration Score] Relatively Healthy -- Score 4")
+        score = 4
     elif ratio < 0.3: 
-        print("\t[Discoloration Score] Okay -- Score 3")
+        sentences.append("\t[Discoloration Score] Okay -- Score 3")
+        score = 3
     elif ratio < 0.4: 
-        print("\t[Discoloration Score] Relatively Unhealthy -- Score 2")
+        sentences.append("\t[Discoloration Score] Relatively Unhealthy -- Score 2")
+        score = 2
     else:
-        print("\t[Discoloration Score] Unhealthy -- Score 1")
+        sentences.append("\t[Discoloration Score] Unhealthy -- Score 1")
+        score = 1
+    cv2.imwrite(name[:-4]+"discoloration.png", not_green)
+    return (name[:-4]+"discoloration.png", sentences, score)
 
 '''algorithm for detecting holes in leaf -- raymond'''
 def checkHoles(img, name):
@@ -344,9 +371,6 @@ def checkHoles(img, name):
     # Draw the border of the leaf in red
     mask_color = (0, 0, 255)
     red_leaf = cv2.drawContours(mask_img, contours=[max_contour], contourIdx=-1, color=mask_color, thickness=cv2.FILLED)  # Creates a red mask of the leaf
-
-    # Going through each pixel of a large image can take a few seconds...
-    print("[Hole detection] Calculating...")
 
     # Preparing to create an image of the leaf with blue background instead of black
     blue_bg = np.zeros_like(red_leaf)
@@ -383,22 +407,79 @@ def checkHoles(img, name):
     # cv2.imshow(name, holes)
     # cv2.waitKey(0)
     # cv2.destroyAllWindows()
+    sentences = []
+    score = 0
     # Print stats
-    print(f"\t[Holes] {hole_pixels:,} pixels / {CURRENT_SA:,} total pixels = {hole_pixels / CURRENT_SA * 100}% holes")
+    sentences.append(f"\t[Holes] {hole_pixels:,} pixels / {CURRENT_SA:,} total pixels = {hole_pixels / CURRENT_SA * 100}% holes")
     ratio = hole_pixels / CURRENT_SA
-    if ratio * 100 < 0.03: 
-        print("\t[Hole Detection Score] Healthy -- Score 5")
-    elif ratio * 100 < 0.05: 
-        print("\t[Hole Detection Score] Relatively Healthy -- Score 4")
-    elif ratio * 100 < 0.10: 
-        print("\t[Hole Detection Score] Okay -- Score 3")
-    elif ratio * 100 < 0.15: 
-        print("\t[Hole Detection Score] Relatively Unhealthy -- Score 2")
+    if ratio * 100 < 0.2: 
+        sentences.append("\t[Hole Detection Score] Healthy -- Score 5")
+        score = 5
+    elif ratio * 100 < 0.6: 
+        sentences.append("\t[Hole Detection Score] Relatively Healthy -- Score 4")
+        score = 4
+    elif ratio * 100 < 0.8: 
+        sentences.append("\t[Hole Detection Score] Okay -- Score 3")
+        score = 3
+    elif ratio * 100 < 5: 
+        sentences.append("\t[Hole Detection Score] Relatively Unhealthy -- Score 2")
+        score = 2
     else:
-        print("\t[Hole Detection Score] Unhealthy -- Score 1")
+        sentences.append("\t[Hole Detection Score] Unhealthy -- Score 1")
+        score = 1
+    cv2.imwrite(name[:-4]+"hole.png", holes)
+    return (name[:-4]+"hole.png", sentences, score)
         
 
+'''The function that writes the result of the images to an html page'''
+def writeToHtml(name, brown_spot_img, sent_brown, yellow, sent_yellow, discolor, sent_disc, hole, sent_hole):
+    with open('result.html', 'a') as the_file:
+        the_file.write('''<span style="font-weight: bolder">'''+name+'''</span>\n''')
+        the_file.write('''<img src = "''' + name + '''" width = "200px" height = "200px">\n''')
+        the_file.write('''<br>\n''')
+        the_file.write('''<span style="font-weight: bolder">Brown Spot</span>\n''')
+        the_file.write('''<img src = "''' + brown_spot_img + '''" width = "200px" height = "200px">\n''')
+        the_file.write('''<br>\n''')
+        for ele in sent_brown: 
+            the_file.write('''<span> ''' + ele + '''</span>\n''')
+            the_file.write('''<br>\n''')
+        the_file.write('''<br>\n''')
+        the_file.write('''<span style="font-weight: bolder">Yellowing</span>\n''')
+        the_file.write('''<img src = "''' + yellow + '''" width = "200px" height = "200px">\n''')
+        the_file.write('''<br>\n''')
+        for ele in sent_yellow: 
+            the_file.write('''<span> ''' + ele + '''</span>\n''')
+            the_file.write('''<br>\n''')
+        the_file.write('''<br>\n''')
+        the_file.write('''<span style="font-weight: bolder">Discoloration</span>\n''')
+        the_file.write('''<img src = "''' + discolor + '''" width = "200px" height = "200px">\n''')
+        the_file.write('''<br>\n''')
+        for ele in sent_disc: 
+            the_file.write('''<span> ''' + ele + '''</span>\n''')
+            the_file.write('''<br>\n''')
+        the_file.write('''<br>\n''')
+        the_file.write('''<span style="font-weight: bolder">Hole Detection</span>\n''')
+        the_file.write('''<img src = "''' + hole + '''" width = "200px" height = "200px">\n''')
+        the_file.write('''<br>\n''')
+        for ele in sent_hole: 
+            the_file.write('''<span> ''' + ele + '''</span>\n''')
+            the_file.write('''<br>\n''')
+        the_file.write('''<br>\n''')
+        the_file.write('''<br>\n''')
+
+
 '''main'''
+# prepping the directory and cleaning old data 
+if os.path.exists("result.html"):
+    os.remove("result.html")
+    
+dir_name = "./library/"
+dir = os.listdir(dir_name)
+
+for item in dir:
+    if item.endswith("brownspot.png") or item.endswith("discoloration.png") or item.endswith("yellowing.png") or item.endswith("hole.png"):
+        os.remove(os.path.join(dir_name, item))
+
 # load all images from the Library directory
 images = {}
 for filename in glob.glob("./library/*.png"):
@@ -407,9 +488,8 @@ for filename in glob.glob("./library/*.png"):
         images[filename] = img
 
 for name, img in images.items():
-    print(name)
-    checkBrownSpot(img.copy(), name)
-    checkYellowing(img.copy(), name)
-    checkDiscoloration(img, name)
-    checkHoles(img, name)
-    print()
+    brown_spot_img, sent_brown, score_brown = checkBrownSpot(img.copy(), name)
+    yellow, sent_yellow, score_yellow = checkYellowing(img.copy(), name)
+    discolor, sent_disc, score_disc = checkDiscoloration(img, name)
+    hole, sent_hole, score_hole = checkHoles(img, name)
+    writeToHtml(name, brown_spot_img, sent_brown, yellow, sent_yellow, discolor, sent_disc, hole, sent_hole)
