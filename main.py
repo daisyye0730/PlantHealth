@@ -189,7 +189,7 @@ def checkBrownSpot(img, name):
     brown = cv2.bitwise_and(hsv, hsv, mask=brown_mask)
     new_brown = cv2.cvtColor(brown, cv2.COLOR_HSV2BGR)
     # horiz = np.concatenate(
-    #     (img, no_green, not_yellow, no_white, no_grey, no_blue, brown), axis=1)
+    #     (img, no_green, not_yellow, no_white, no_grey, no_blue, new_brown), axis=1)
     # cv2.imshow(name+"+ xgree + xyellow + xwhite + xgrey + xblue + brown", horiz)
     # cv2.waitKey(0)
     # cv2.destroyAllWindows()
