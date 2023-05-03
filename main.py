@@ -2,6 +2,7 @@ import cv2
 import glob
 import numpy as np
 import os 
+import sys
 
 # constants
 # if not commented, the range is in hsv 
@@ -480,16 +481,29 @@ for item in dir:
     if item.endswith("brownspot.png") or item.endswith("discoloration.png") or item.endswith("yellowing.png") or item.endswith("hole.png"):
         os.remove(os.path.join(dir_name, item))
 
-# load all images from the Library directory
-images = {}
-for filename in glob.glob("./library/*.png"):
-    img = cv2.imread(filename)
-    if img is not None:
-        images[filename] = img
+# check if we are doing command line argument or running the entire database
+if len(sys.argv) > 1: 
+    for name in sys.argv:
+        if name == "main.py":
+            continue
+        img = cv2.imread(name)
+        brown_spot_img, sent_brown, score_brown = checkBrownSpot(img.copy(), name)
+        yellow, sent_yellow, score_yellow = checkYellowing(img.copy(), name)
+        discolor, sent_disc, score_disc = checkDiscoloration(img, name)
+        hole, sent_hole, score_hole = checkHoles(img, name)
+        writeToHtml(name, brown_spot_img, sent_brown, yellow, sent_yellow, discolor, sent_disc, hole, sent_hole)
 
-for name, img in images.items():
-    brown_spot_img, sent_brown, score_brown = checkBrownSpot(img.copy(), name)
-    yellow, sent_yellow, score_yellow = checkYellowing(img.copy(), name)
-    discolor, sent_disc, score_disc = checkDiscoloration(img, name)
-    hole, sent_hole, score_hole = checkHoles(img, name)
-    writeToHtml(name, brown_spot_img, sent_brown, yellow, sent_yellow, discolor, sent_disc, hole, sent_hole)
+else:
+    # load all images from the Library directory
+    images = {}
+    for filename in glob.glob("./library/*.png"):
+        img = cv2.imread(filename)
+        if img is not None:
+            images[filename] = img
+
+    for name, img in images.items():
+        brown_spot_img, sent_brown, score_brown = checkBrownSpot(img.copy(), name)
+        yellow, sent_yellow, score_yellow = checkYellowing(img.copy(), name)
+        discolor, sent_disc, score_disc = checkDiscoloration(img, name)
+        hole, sent_hole, score_hole = checkHoles(img, name)
+        writeToHtml(name, brown_spot_img, sent_brown, yellow, sent_yellow, discolor, sent_disc, hole, sent_hole)
